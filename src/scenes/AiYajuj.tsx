@@ -247,7 +247,7 @@ export const AiYajuj: React.FC = () => {
             ?
           </text>
           <Label x={1400} y={448} size={20} color={C.muted}>
-            mesin & robot di bumi
+            mesin & robot di bumi · angka ilustrasi
           </Label>
         </g>
         {/* kenop kendali yang tergelincir */}

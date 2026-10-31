@@ -127,8 +127,8 @@ export const Hook: React.FC = () => {
   // ---------- lensa renungan ----------
   const eyeOpen = ramp(t, cue(4) + 0.2, cue(4) + 1.4, EASE_IN_OUT);
   const eyeOp = ramp(t, cue(4) - 0.1, cue(4) + 0.6);
-  const EW = 420;
-  const EH = 150 * eyeOpen * (1 - 0.06 * Math.max(0, Math.sin(t * 0.9)) ** 30);
+  // lingkaran cahaya (bukan bentuk mata)
+  const LR = Math.max(0.1, 175 * eyeOpen);
   const fast = ramp(t, wCepat - 0.6, wCepat + 0.8, EASE_IN_OUT);
   // putaran jarum waktu: kecepatan naik halus (integral analitik)
   const handA = t * 40 + 260 * Math.max(0, t - (wCepat - 0.6)) * fast;
@@ -164,7 +164,7 @@ export const Hook: React.FC = () => {
             <rect x={960 - half} y={SY - SH / 2} width={half * 2} height={SH} />
           </clipPath>
           <clipPath id="hk-eyeclip">
-            <path d={`M${960 - EW},500 Q960,${500 - EH * 2} ${960 + EW},500 Q960,${500 + EH * 2} ${960 - EW},500 Z`} />
+            <path d={`M${960 - LR},500 A${LR} ${LR} 0 1 0 ${960 + LR},500 A${LR} ${LR} 0 1 0 ${960 - LR},500 Z`} />
           </clipPath>
         </defs>
 
@@ -462,7 +462,7 @@ export const Hook: React.FC = () => {
               })}
             </g>
             {/* bentuk lensa */}
-            <path d={`M${960 - EW},500 Q960,${500 - EH * 2} ${960 + EW},500 Q960,${500 + EH * 2} ${960 - EW},500 Z`} fill="url(#hk-eye)" stroke={C.gold} strokeWidth={3} />
+            <path d={`M${960 - LR},500 A${LR} ${LR} 0 1 0 ${960 + LR},500 A${LR} ${LR} 0 1 0 ${960 - LR},500 Z`} fill="url(#hk-eye)" stroke={C.gold} strokeWidth={3} />
             <g clipPath="url(#hk-eyeclip)">
               {[118, 92, 66].map((r, k) => (
                 <circle key={r} cx={960} cy={500} r={r} fill="none" stroke={k === 1 ? C.gold : C.cyan} strokeOpacity={0.55} strokeWidth={2} strokeDasharray={k === 1 ? '3 9' : '14 10'} transform={`rotate(${(k % 2 ? -1 : 1) * t * (14 + k * 8)} 960 500)`} />
