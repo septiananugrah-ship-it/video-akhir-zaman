@@ -8,7 +8,7 @@ const CHAPTERS = TIMELINE.scenes.filter((s) => s.chapter);
 
 export const PARTS: Record<number, {label: string; color: string}> = {
   1: {label: 'Bagian 1 · Awal kisah manusia', color: C.cyan},
-  2: {label: 'Bagian 2 · Tanda-tanda kecil', color: C.gold},
+  2: {label: 'Bagian 2 · Tanda-tanda kecil', color: C.kin},
   3: {label: 'Bagian 3 · Tanda-tanda besar', color: C.heat},
   4: {label: 'Bagian 4 · Renungan zaman kita', color: C.spr},
 };

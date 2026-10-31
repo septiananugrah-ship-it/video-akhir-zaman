@@ -1,350 +1,385 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
-import {BACK, EASE_IN_OUT, cyc, ramp, rand, smoothPath, win} from '../anim';
-import {DrawPath, Glow, Motes, Ripple, Spark, Stage, Stream, pointAlong} from '../components/primitives';
+import {BACK, EASE_IN_OUT, cyc, mix, ramp} from '../anim';
+import {Glow, Label, Motes, Ripple, Stage, Stream, Twinkles} from '../components/primitives';
 import {useScene} from '../SceneContext';
 import {C, FONT, type Hue} from '../theme';
 
-// Peta video: tiga kartu bagian dengan ikon yang terus bergerak (dihitung analitik):
-// (1) hamburan Rutherford: partikel alfa (jingga) pada lintasan hiperbola Coulomb, tan(θ/2) = d/(2b) —
-//     makin dekat inti makin besar belokan, satu memantul balik;
-// (2) atom Bohr rₙ ∝ n²: elektron turun 3 → 2 dan memancarkan foton 656 nm (merah), lalu dieksitasi lagi;
-// (3) awan orbital 1s + 2p (titik sampel kerapatan) yang berputar, dengan gelombang elektron berdiri samar;
-// dihubungkan oleh lintasan tempat sebutir cahaya merambat.
-const PARTS = [
-  {n: '1', title: 'Jejak sejarah', color: C.kin, hue: 'kin' as Hue, items: ['Model Thomson', 'Percobaan Rutherford', 'Krisis atom klasik']},
-  {n: '2', title: 'Atom Bohr', color: C.work, hue: 'work' as Hue, items: ['Spektrum garis', 'Postulat Bohr', 'Tingkat energi', 'Energi ionisasi', 'Deret Balmer']},
-  {n: '3', title: 'Menuju kimia kuantum', color: C.spr, hue: 'spr' as Hue, items: ['Keterbatasan Bohr', 'Gelombang elektron', 'Orbital']},
-];
-const KEYS = [
-  ['thomson', 'rutherford', 'krisis'],
-  ['spektrum', 'postulat', 'tingkat', 'ionisasi', 'balmer'],
-  ['keterbatasan', 'gelombang', 'orbital'],
-];
-const CX = [380, 960, 1540];
-const TOP = 196;
-const CW = 500;
-const CH = 600;
-const PY = TOP + CH + 40;
-const ICON_Y = TOP + 196;
-
-const X0P = CX[0] - 200;
-const X1P = CX[2] + 200;
-const PTS: [number, number][] = Array.from({length: 61}, (_, i) => {
-  const u = i / 60;
-  const x = X0P + (X1P - X0P) * u;
-  const y = PY + 9 * (1 - Math.cos(((x - CX[0]) / (CX[1] - CX[0])) * Math.PI * 2)) * (x > CX[0] && x < CX[2] ? 1 : 0.3);
-  return [x, y];
-});
-const PTS_D = smoothPath(PTS);
-const UX = CX.map((x) => (x - X0P) / (X1P - X0P));
-
+// Peta video & cara membaca:
+// (1) legenda: pil emas "QS / HR = sumber", pil ungu "Renungan · bukan tafsir", catatan "tanpa wajah — simbol",
+//     masing-masing dengan ikon bergerak (gulungan bercahaya, chip berdenyut, simbol yang bergantian);
+// (2) empat kartu bagian dengan ikon bergerak: bibit di atas bumi berputar, menara yang meninggi,
+//     matahari terbit dari barat, chip + jam pasir yang terbalik berkala;
+// (3) catatan penutup: rujukan utama para ulama · Allahu a'lam.
 const fr = (v: number) => ((v % 1) + 1) % 1;
-const TAU = Math.PI * 2;
-type P = [number, number];
-const RED = '#ff2a1a';
+const slot = (t: number, a: number, b: number, fi = 0.6, fo = 0.6) => Math.min(ramp(t, a, a + fi), 1 - ramp(t, b - fo, b, EASE_IN_OUT));
 
-/** Lintasan hiperbola hamburan Coulomb (tolak) relatif terhadap inti; b = parameter dampak (+ = di atas). */
-const hyper = (b: number, d: number, rmax: number, box: [number, number]): P[] => {
-  const s = Math.sign(b) || 1;
-  const B = Math.abs(b);
-  const pmax = Math.PI - 2 * Math.atan(d / (2 * B));
-  const pts: P[] = [];
-  for (let i = 1; i < 500; i++) {
-    const ph = (pmax * i) / 500;
-    const u = Math.sin(ph) / B + (d / (2 * B * B)) * (Math.cos(ph) - 1);
-    if (u <= 0) continue;
-    const r = 1 / u;
-    if (r > rmax) continue;
-    const x = -r * Math.cos(ph);
-    const y = -s * r * Math.sin(ph);
-    if (Math.abs(x) > box[0] || Math.abs(y) > box[1]) continue;
-    pts.push([x, y]);
-  }
-  return pts;
+const Pill: React.FC<{x: number; y: number; p: number; color: string; children: React.ReactNode; size?: number}> = ({x, y, p, color, children, size = 28}) =>
+  p <= 0.001 ? null : (
+    <div
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        transform: `translate(-50%, -50%) scale(${0.85 + 0.15 * Math.min(1, p)})`,
+        opacity: Math.min(1, p),
+        padding: '10px 26px',
+        borderRadius: 999,
+        background: 'rgba(10,16,36,0.92)',
+        border: `2.5px solid ${color}`,
+        boxShadow: `0 0 26px ${color}55`,
+        color,
+        fontFamily: FONT.head,
+        fontWeight: 600,
+        fontSize: size,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </div>
+  );
+
+const ROW_Y = [380, 530, 680];
+const IX = 430;
+const PILL_X = 770;
+const DX = 1010;
+
+const CARDS = [
+  {n: '1', title: 'Awal kisah', sub: 'khalifah · amanah · para nabi', color: C.cyan, hue: 'cyan' as Hue, key: 'awal', nth: 0},
+  {n: '2', title: 'Tanda kecil', sub: 'bangunan · ilmu · amanah', color: C.kin, hue: 'kin' as Hue, key: 'tanda', nth: 0},
+  {n: '3', title: 'Tanda besar', sub: 'sepuluh tanda besar', color: C.heat, hue: 'heat' as Hue, key: 'tanda', nth: 1},
+  {n: '4', title: 'Renungan', sub: 'zaman teknologi & AI', color: C.spr, hue: 'spr' as Hue, key: 'renungan', nth: 0},
+];
+const CXS = [330, 750, 1170, 1590];
+const CT = 250;
+const CHt = 480;
+const CW = 360;
+const IY = CT + 170;
+
+/** Jam pasir kecil yang mengalir lalu terbalik berkala (pasir habis → putar 180° → penuh lagi, tanpa loncatan). */
+const Hourglass: React.FC<{x: number; y: number; s: number; t: number; color: string}> = ({x, y, s, t, color}) => {
+  const ph = fr(t / 5);
+  const drain = ramp(ph, 0, 0.82, (v) => v);
+  const rot = 180 * ramp(ph, 0.84, 1, EASE_IN_OUT);
+  const w = 30 * s;
+  const h = 46 * s;
+  const top = 1 - drain;
+  return (
+    <g transform={`rotate(${rot} ${x} ${y})`}>
+      <path d={`M${x - w},${y - h} L${x + w},${y - h} L${x + 4},${y} L${x + w},${y + h} L${x - w},${y + h} L${x - 4},${y} Z`} fill="rgba(160,190,255,0.12)" stroke="#cfe0ff" strokeOpacity={0.55} strokeWidth={2} />
+      <path d={`M${x - w * top},${y - h * top} L${x + w * top},${y - h * top} L${x},${y} Z`} fill={color} opacity={0.9} />
+      <path d={`M${x - w * Math.sqrt(drain)},${y + h} L${x + w * Math.sqrt(drain)},${y + h} L${x},${y + h - h * 0.8 * drain} Z`} fill={color} opacity={0.9} />
+      {drain < 1 && ph < 0.82 ? <line x1={x} y1={y} x2={x} y2={y + h - h * 0.8 * drain} stroke={color} strokeWidth={2} opacity={0.8} strokeDasharray="3 4" strokeDashoffset={-t * 30} /> : null}
+      <rect x={x - w - 8} y={y - h - 8} width={2 * w + 16} height={8} rx={3} fill="#8a6a22" />
+      <rect x={x - w - 8} y={y + h} width={2 * w + 16} height={8} rx={3} fill="#8a6a22" />
+    </g>
+  );
 };
-const NX = 30; // inti relatif pusat ikon
-const TRACKS = [-92, -56, -28, -11, 1.4, 11, 28, 56, 92].map((b) => hyper(b, 18, 320, [230 + NX, 104]).map(([x, y]): P => [x + NX, y]));
 
-// awan orbital
-const CLOUD: {x: number; y: number; z: number; s: number}[] = (() => {
-  const out: {x: number; y: number; z: number; s: number}[] = [];
-  for (let i = 0; i < 170; i++) {
-    const u = (k: number) => Math.max(1e-4, rand(i * 13.1 + k * 2.7 + 1));
-    if (i < 50) {
-      const r = -0.5 * Math.log(u(1) * u(2) * u(3));
-      const ct = 2 * u(4) - 1;
-      const ph = TAU * u(5);
-      const st = Math.sqrt(1 - ct * ct);
-      out.push({x: r * st * Math.cos(ph), y: r * st * Math.sin(ph), z: r * ct, s: 0});
-    } else {
-      const r = -Math.log(u(1) * u(2) * u(3) * u(4) * u(5)) * 0.42;
-      const sg = u(6) > 0.5 ? 1 : -1;
-      const ct = sg * Math.cbrt(u(7));
-      const ph = TAU * u(8);
-      const st = Math.sqrt(1 - ct * ct);
-      out.push({x: r * st * Math.cos(ph), y: r * ct, z: r * st * Math.sin(ph), s: 1});
-    }
-  }
-  return out;
-})();
-
-const Tag: React.FC<{x: number; y: number; color: string; children: React.ReactNode}> = ({x, y, color, children}) => (
-  <text x={x} y={y} textAnchor="middle" fontFamily={FONT.mono} fontSize={20} fill={color} opacity={0.92}>
-    {children}
-  </text>
-);
-
-/** Ikon tiap bagian (SVG, selalu bergerak). */
-const Icon: React.FC<{i: number; x: number; y: number; t: number; act: number}> = ({i, x, y, t, act}) => {
-  if (i === 0) {
-    // hamburan Rutherford
-    return (
-      <g>
-        <Glow x={x + NX} y={y} r={170} color="kin" opacity={0.2 + 0.3 * act} />
-        <rect x={x + NX - 3} y={y - 104} width={6} height={208} fill={C.gold} opacity={0.18} />
-        {TRACKS.map((pts, k) => (
-          <path key={`p${k}`} d={pts.map((q, j) => `${j ? 'L' : 'M'}${(x + q[0]).toFixed(1)},${(y + q[1]).toFixed(1)}`).join(' ')} fill="none" stroke={C.kin} strokeWidth={k === 4 ? 2.5 : 1.6} strokeDasharray="4 6" opacity={k === 4 ? 0.6 : 0.35} />
-        ))}
-        {TRACKS.map((pts, k) => {
-          const ph = fr(t * 0.42 + rand(k * 3.3));
-          const [px, py] = pointAlong(pts, ph);
-          const trail = [1, 2, 3, 4].map((j) => {
-            const q = pointAlong(pts, Math.max(0, ph - j * 0.025));
-            return [x + q[0], y + q[1]] as P;
-          });
-          return <Spark key={k} x={x + px} y={y + py} r={5} color="kin" trail={trail} opacity={cyc(ph)} />;
-        })}
-        <circle cx={x + NX} cy={y} r={20 + 3 * Math.sin(t * 3)} fill="url(#soft-heat)" />
-        <circle cx={x + NX} cy={y} r={7} fill={C.heat} />
-        <circle cx={x + NX - 2} cy={y - 2} r={2.5} fill="#fff" opacity={0.7} />
-        <Tag x={x + NX} y={y + 128} color={C.kin}>
-          hamburan alfa
-        </Tag>
-      </g>
-    );
-  }
-  if (i === 1) {
-    // atom Bohr: 3 → 2 memancarkan foton merah
-    const nx = x - 70;
-    const P = 3.2;
-    const raw = t / P;
-    const cyIdx = Math.floor(raw);
-    const ph = raw - cyIdx;
-    const nEff = 3 - ramp(ph, 0.42, 0.5, EASE_IN_OUT) + ramp(ph, 0.86, 0.96, EASE_IN_OUT);
-    const R = 12.5 * nEff * nEff;
-    const w = 2.1;
-    const ang = t * w;
-    const ex = nx + R * Math.cos(ang);
-    const ey = y - R * Math.sin(ang);
-    const aE = (cyIdx + 0.46) * P * w;
-    const q = (ph - 0.46) / 0.42;
-    const sx = nx + 12.5 * 6.25 * Math.cos(aE);
-    const sy = y - 12.5 * 6.25 * Math.sin(aE);
-    const dx = Math.cos(aE);
-    const dy = -Math.sin(aE);
-    const dist = 30 + 190 * Math.max(0, q);
-    const px = sx + dx * dist;
-    const py = sy + dy * dist;
-    const wave = Array.from({length: 21}, (_, j) => {
-      const u = (j / 20 - 0.5) * 60;
-      const amp = 8 * Math.sin(u * 0.36 - t * 20) * Math.cos((u / 60) * Math.PI);
-      return `${j ? 'L' : 'M'}${(px + u * dx + amp * -dy).toFixed(1)},${(py + u * dy + amp * dx).toFixed(1)}`;
-    }).join(' ');
-    return (
-      <g>
-        <Glow x={nx} y={y} r={170} color="work" opacity={0.2 + 0.3 * act} />
-        {[1, 2, 3].map((n) => (
-          <circle key={n} cx={nx} cy={y} r={12.5 * n * n} fill="none" stroke={C.cyan} strokeWidth={2} strokeDasharray={n > 1 ? '5 6' : undefined} opacity={0.3 + 0.4 * Math.max(0, 1 - Math.abs(nEff - n))} />
-        ))}
-        <circle cx={nx} cy={y} r={18} fill="url(#soft-heat)" />
-        <circle cx={nx} cy={y} r={7} fill={C.heat} />
-        {[1, 2, 3, 4].map((k) => {
-          const aa = ang - k * 0.13;
-          return <circle key={k} cx={nx + R * Math.cos(aa)} cy={y - R * Math.sin(aa)} r={7 * (1 - k / 5)} fill={C.pot} opacity={0.3 * (1 - k / 5)} />;
-        })}
-        <Spark x={ex} y={ey} r={7} color="pot" />
-        <Ripple x={sx} y={sy} p={(ph - 0.44) / 0.4} r={60} color="heat" rings={2} width={2} />
-        {q > 0 && q < 1 ? (
-          <g opacity={Math.min(1, q * 8, (1 - q) * 5)}>
-            <circle cx={px} cy={py} r={26} fill="url(#soft-heat)" />
-            <path d={wave} fill="none" stroke={RED} strokeWidth={3.5} strokeLinecap="round" />
-          </g>
-        ) : null}
-        {/* tangga mini */}
-        {[1, 2, 3].map((n) => {
-          const yy = y - 90 + (13.6 / (n * n) / 13.6) * 180;
-          return <line key={n} x1={x + 150} y1={yy} x2={x + 215} y2={yy} stroke={C.work} strokeWidth={3} opacity={0.4 + 0.5 * Math.max(0, 1 - Math.abs(nEff - n))} />;
-        })}
-        <circle cx={x + 182} cy={y - 90 + (1 / (nEff * nEff)) * 180} r={6} fill={C.pot} />
-        <Tag x={nx} y={y + 128} color={C.work}>
-          rₙ ∝ n²
-        </Tag>
-        <Tag x={x + 182} y={y + 128} color={C.work}>
-          foton
-        </Tag>
-      </g>
-    );
-  }
-  // awan orbital
-  const rot = t * 0.5;
-  const tilt = 0.4 + 0.1 * Math.sin(t * 0.3);
+const Chip: React.FC<{x: number; y: number; s: number; t: number; color: string}> = ({x, y, s, t, color}) => {
+  const w = 44 * s;
   return (
     <g>
-      <Glow x={x} y={y} r={170} color="spr" opacity={0.25 + 0.3 * act} />
-      <path
-        d={Array.from({length: 97}, (_, j) => {
-          const th = (j / 96) * TAU;
-          const r = 108 + 8 * Math.sin(5 * th) * Math.cos(t * 3);
-          return `${j ? 'L' : 'M'}${(x + r * Math.cos(th)).toFixed(1)},${(y - r * 0.92 * Math.sin(th)).toFixed(1)}`;
-        }).join(' ')}
-        fill="none"
-        stroke={C.spr}
-        strokeWidth={2}
-        opacity={0.35}
-      />
-      {CLOUD.map((p, k) => {
-        const x1 = p.x * Math.cos(rot) + p.z * Math.sin(rot);
-        const z1 = -p.x * Math.sin(rot) + p.z * Math.cos(rot);
-        const y1 = p.y * Math.cos(tilt) - z1 * Math.sin(tilt);
-        const z2 = p.y * Math.sin(tilt) + z1 * Math.cos(tilt);
-        const sc = p.s ? 62 : 54;
-        return <circle key={k} cx={x + x1 * sc} cy={y + y1 * sc} r={2.2 + 0.9 * z2} fill={p.s ? C.spr : C.pot} opacity={(0.5 + 0.3 * z2) * (0.6 + 0.4 * Math.sin(t * 2.3 + k))} />;
+      {[-1, 0, 1].map((k) => (
+        <g key={k} stroke={color} strokeWidth={3} opacity={0.7}>
+          <line x1={x + k * 22 * s} y1={y - w} x2={x + k * 22 * s} y2={y - w - 12 * s} />
+          <line x1={x + k * 22 * s} y1={y + w} x2={x + k * 22 * s} y2={y + w + 12 * s} />
+          <line x1={x - w} y1={y + k * 22 * s} x2={x - w - 12 * s} y2={y + k * 22 * s} />
+          <line x1={x + w} y1={y + k * 22 * s} x2={x + w + 12 * s} y2={y + k * 22 * s} />
+        </g>
+      ))}
+      <rect x={x - w} y={y - w} width={2 * w} height={2 * w} rx={9 * s} fill="#161a3c" stroke={color} strokeWidth={2.5} />
+      {[0, 1, 2, 3].map((k) => {
+        const a = (k / 4) * Math.PI * 2 + t * 1.4;
+        return <circle key={k} cx={x + 18 * s * Math.cos(a)} cy={y + 18 * s * Math.sin(a)} r={4 * s} fill={color} opacity={0.5 + 0.5 * Math.sin(t * 3 + k)} />;
       })}
-      <circle cx={x} cy={y} r={5} fill={C.heat} />
-      <Tag x={x} y={y + 128} color={C.spr}>
-        orbital
-      </Tag>
+      <circle cx={x} cy={y} r={7 * s} fill="#f1e4ff" opacity={0.6 + 0.4 * Math.sin(t * 2.4)} />
     </g>
   );
 };
 
 export const Roadmap: React.FC = () => {
-  const {t, cue, dur, wordOf} = useScene();
-  const head = ramp(t, 0, 0.8);
-  const ps = [ramp(t, cue(1) - 0.2, cue(1) + 0.7, BACK), ramp(t, cue(2) - 0.2, cue(2) + 0.7, BACK), ramp(t, cue(3) - 0.2, cue(3) + 0.7, BACK)];
-  const act = [win(t, cue(1) - 0.2, cue(2) - 0.3, 0.6, 0.8), win(t, cue(2) - 0.2, cue(3) - 0.3, 0.6, 0.8), win(t, cue(3) - 0.2, dur, 0.6, 0.8)];
-  const pathP =
-    UX[0] * ramp(t, 0.6, cue(1), EASE_IN_OUT) +
-    (UX[1] - UX[0]) * ramp(t, cue(2) - 0.6, cue(2) + 0.6, EASE_IN_OUT) +
-    (UX[2] - UX[1]) * ramp(t, cue(3) - 0.6, cue(3) + 0.6, EASE_IN_OUT) +
-    (1 - UX[2]) * ramp(t, cue(3) + 0.6, cue(3) + 2.2, EASE_IN_OUT);
-  const [lx, ly] = pointAlong(PTS, pathP);
-  const lead: [number, number][] = [1, 2, 3, 4, 5].map((k) => pointAlong(PTS, Math.max(0, pathP - k * 0.008)));
-  const loop = ramp(t, cue(3) + 1.6, cue(3) + 2.6);
-  const ghost = win(t, 0.4, cue(3) + 0.6, 0.8, 0.8);
-  const itemAt = (i: number, k: number) => wordOf(i + 1, KEYS[i][k]) - 0.15;
-  const imp = ramp(t, wordOf(0, 'fisika') - 0.2, wordOf(0, 'atom') + 0.6);
-  const three = ramp(t, wordOf(0, 'tiga') - 0.2, wordOf(0, 'tiga') + 0.6);
+  const {t, cue, wordOf} = useScene();
+  const legendOut = 1 - ramp(t, cue(4) - 0.2, cue(4) + 0.6, EASE_IN_OUT);
+  const headA = slot(t, wordOf(0, 'cara') - 0.3, cue(4) + 0.4, 0.6, 0.6);
+  const headB = ramp(t, cue(4) - 0.1, cue(4) + 0.6);
+
+  const r1i = ramp(t, wordOf(1, 'bersumber') - 0.2, wordOf(1, 'bersumber') + 0.5);
+  const r1p = ramp(t, wordOf(1, 'tanda') - 0.2, wordOf(1, 'tanda') + 0.4, BACK);
+  const r2i = ramp(t, wordOf(2, 'teknologi') - 0.2, wordOf(2, 'teknologi') + 0.5);
+  const r2p = ramp(t, wordOf(2, 'renungan') - 0.2, wordOf(2, 'renungan') + 0.4, BACK);
+  const r2d = ramp(t, wordOf(2, 'pemikiran') - 0.2, wordOf(2, 'pemikiran') + 0.5);
+  const r3i = ramp(t, wordOf(3, 'wajah') - 0.2, wordOf(3, 'wajah') + 0.5);
+  const r3d = ramp(t, wordOf(3, 'ditampilkan') - 0.2, wordOf(3, 'ditampilkan') + 0.5);
+  const r3p = ramp(t, wordOf(3, 'simbol') - 0.2, wordOf(3, 'simbol') + 0.4, BACK);
+  const lo = legendOut;
+
+  const cardP = CARDS.map((c) => ramp(t, wordOf(4, c.key, c.nth) - 0.3, wordOf(4, c.key, c.nth) + 0.5, BACK));
+  const dim = 1 - 0.3 * ramp(t, cue(5), cue(5) + 0.8);
+  const ulama = ramp(t, wordOf(5, 'ulama') - 0.2, wordOf(5, 'ulama') + 0.5);
+  const allah = ramp(t, wordOf(5, 'allah') - 0.2, wordOf(5, 'allah') + 0.6);
+
+  // simbol yang bergantian di baris 3 (silang-pudar)
+  const symPh = (t - wordOf(3, 'wajah')) / 1.6;
+  const symW = (k: number) => {
+    const d = fr(symPh / 4 - k / 4) * 4; // 0..4
+    return Math.max(0, 1 - Math.abs(d - 0.5) * 1.2) + Math.max(0, 1 - Math.abs(d - 4.5) * 1.2);
+  };
 
   return (
     <AbsoluteFill>
-      <div style={{position: 'absolute', left: 0, right: 0, top: 96, textAlign: 'center', fontFamily: FONT.head, fontSize: 50, fontWeight: 700, color: C.ink, opacity: head, translate: `0px ${(1 - head) * 14}px`}}>
-        Peta perjalanan: <span style={{color: C.work, opacity: 0.35 + 0.65 * imp}}>fisika atom</span> <span style={{color: C.muted, opacity: 0.35 + 0.65 * three}}>dalam tiga bagian</span>
-      </div>
       <Stage>
-        <Motes x={960} y={520} rx={900} ry={340} n={36} color="cyan" opacity={0.35} seed={11} />
-        {/* butir cahaya warna-warni (foton) yang melayang di latar */}
-        {Array.from({length: 18}, (_, k) => {
-          const ph = fr(t * (0.05 + rand(k) * 0.05) + rand(k * 3.1));
-          const x = 60 + rand(k * 5.3) * 1800 + 18 * Math.sin(t * 0.8 + k);
-          const y = 900 - ph * 760;
-          const col = [RED, '#00e5ff', '#3a4bff', C.pot, C.spr][k % 5];
-          return <circle key={k} cx={x} cy={y} r={2.5 + rand(k * 2.2) * 2} fill={col} opacity={0.4 * cyc(ph) * head} />;
+        <defs>
+          {CXS.map((x, i) => (
+            <clipPath key={i} id={`rm-earth${i}`}>
+              <circle cx={x} cy={IY + 20} r={66} />
+            </clipPath>
+          ))}
+        </defs>
+        <Glow x={960} y={500} r={760} color="gold" opacity={0.12} />
+
+        {/* ---------------- judul kecil ---------------- */}
+        <g opacity={headA}>
+          <path d={`M780,222 q40,-18 80,0 v40 q-40,-18 -80,0 Z M860,222 q40,-18 80,0 v40 q-40,-18 -80,0 Z`} fill="none" stroke={C.gold} strokeWidth={2.5} transform="translate(-220 -20)" />
+          <Label x={1030} y={222} size={48} weight={700} color={C.ink}>
+            Cara membaca video ini
+          </Label>
+        </g>
+        <path d="M720,262 H1300" stroke={C.gold} strokeWidth={2} strokeLinecap="round" pathLength={1000} strokeDasharray="1000 1000" strokeDashoffset={1000 * (1 - ramp(t, wordOf(0, 'cara'), wordOf(0, 'membaca') + 0.8, EASE_IN_OUT))} opacity={headA * 0.6} />
+        {[0, 1, 2].map((k) => {
+          const ph = fr(t * 0.25 + k / 3);
+          return <circle key={k} cx={720 + 580 * ph} cy={262} r={4} fill="#fff4d6" opacity={headA * cyc(ph)} />;
         })}
-        {PARTS.map((p, i) => (
-          <rect
-            key={`gh${i}`}
-            x={CX[i] - CW / 2}
-            y={TOP}
-            width={CW}
-            height={CH}
-            rx={24}
-            fill="none"
-            stroke={p.color}
-            strokeOpacity={0.35}
-            strokeWidth={2}
-            strokeDasharray="10 12"
-            strokeDashoffset={-t * 24}
-            opacity={ghost * (1 - Math.min(1, ps[i]))}
-          />
-        ))}
-        {PARTS.map((p, i) => (
-          <Glow key={`gl${i}`} x={CX[i]} y={TOP + CH / 2} r={420} color={p.hue} opacity={0.35 * act[i]} />
-        ))}
-        <path d={PTS_D} fill="none" stroke={C.line} strokeWidth={4} strokeDasharray="4 12" strokeLinecap="round" opacity={head} />
-        <DrawPath d={PTS_D} p={pathP} stroke="cyan" width={3} halo opacity={0.85} />
-        <Spark x={lx} y={ly} r={7} color="cyan" trail={lead} opacity={(1 - loop) * ramp(t, 0.6, 1.0)} />
-        <Stream pts={PTS} color="cyan" n={5} speed={0.12} r={5} jitter={2} opacity={loop} />
-        {PARTS.map((p, i) => (
-          <g key={i} opacity={Math.min(1, ps[i])}>
-            <Ripple x={CX[i]} y={PY} p={ramp(t, cue(i + 1) - 0.1, cue(i + 1) + 1.4, (x) => x)} r={90} color={p.hue} />
-            <circle cx={CX[i]} cy={PY} r={20 + 4 * Math.sin(t * 2.4 + i)} fill={`url(#soft-${p.hue})`} />
-            <circle cx={CX[i]} cy={PY} r={11} fill={p.color} />
-            <circle cx={CX[i]} cy={PY} r={4.5} fill="#fff" opacity={0.8} />
-          </g>
-        ))}
-      </Stage>
-      {PARTS.map((p, i) => {
-        const q0 = Math.min(1, ps[i]);
-        return (
-          <div
-            key={p.n}
-            style={{
-              position: 'absolute',
-              left: CX[i] - CW / 2,
-              top: TOP,
-              width: CW,
-              height: CH,
-              borderRadius: 24,
-              background: 'linear-gradient(160deg, rgba(22,34,72,0.94), rgba(10,16,36,0.94))',
-              border: `1.5px solid ${p.color}55`,
-              borderTop: `8px solid ${p.color}`,
-              boxShadow: `0 20px 60px rgba(0,0,0,0.45), 0 0 ${40 + 40 * act[i]}px ${p.color}${Math.round(0x22 + 0x30 * act[i]).toString(16).padStart(2, '0')}`,
-              opacity: Math.min(1, ps[i] * 1.3) * (0.35 + 0.65 * q0),
-              translate: `0px ${(1 - q0) * 40 - 6 * act[i]}px`,
-              scale: String(0.9 + 0.1 * ps[i]),
-              fontFamily: FONT.head,
-              color: C.ink,
-              padding: '22px 34px',
-              boxSizing: 'border-box',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                pointerEvents: 'none',
-                background: `linear-gradient(105deg, transparent ${-40 + 150 * q0 - 16}%, rgba(255,230,210,0.12) ${-40 + 150 * q0}%, transparent ${-40 + 150 * q0 + 16}%)`,
-              }}
-            />
-            <div style={{fontFamily: FONT.mono, fontSize: 22, color: p.color, letterSpacing: 4}}>BAGIAN {p.n}</div>
-            <div style={{fontSize: i === 2 ? 29 : 31, fontWeight: 700, marginTop: 4, letterSpacing: -0.5, whiteSpace: 'nowrap'}}>{p.title}</div>
-            <div style={{height: 212}} />
-            <div>
-              {p.items.map((it, k) => {
-                const q = ramp(t, itemAt(i, k), itemAt(i, k) + 0.6);
-                return (
-                  <div key={it} style={{fontSize: 27, color: C.muted, lineHeight: i === 1 ? 1.55 : 1.7, opacity: q, translate: `${(1 - q) * 14}px 0px`, whiteSpace: 'nowrap'}}>
-                    <span style={{color: p.color, marginRight: 8}}>—</span>
-                    {it}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-      <Stage>
-        {PARTS.map((_, i) => (
-          <g key={i} opacity={Math.min(1, ps[i])}>
-            <g transform={`translate(${CX[i]} ${ICON_Y}) scale(0.8) translate(${-CX[i]} ${-ICON_Y})`}>
-              <Icon i={i} x={CX[i]} y={ICON_Y} t={t} act={act[i]} />
+        <Twinkles x={1010} y={222} rx={340} ry={50} n={4} color="gold" opacity={headA} />
+        <Label x={960} y={190} size={44} weight={700} color={C.ink} opacity={headB}>
+          Alurnya empat bagian
+        </Label>
+
+        {/* ---------------- legenda ---------------- */}
+        {lo > 0.001 ? (
+          <g opacity={lo}>
+            {/* baris 1: gulungan bercahaya */}
+            <g opacity={r1i}>
+              <Glow x={IX} y={ROW_Y[0]} r={90} color="gold" opacity={0.5} />
+              <rect x={IX - 46} y={ROW_Y[0] - 26} width={92} height={52} rx={6} fill="#2a210d" stroke={C.gold} strokeWidth={2} />
+              <rect x={IX - 56} y={ROW_Y[0] - 34} width={12} height={68} rx={6} fill="#c9a24a" />
+              <rect x={IX + 44} y={ROW_Y[0] - 34} width={12} height={68} rx={6} fill="#c9a24a" />
+              {[0, 1, 2].map((k) => (
+                <line key={k} x1={IX - 32} y1={ROW_Y[0] - 12 + k * 12} x2={IX - 32 + 64 * (0.6 + 0.4 * Math.abs(Math.sin(t * 0.8 + k)))} y2={ROW_Y[0] - 12 + k * 12} stroke={C.gold} strokeWidth={2.5} opacity={0.8} />
+              ))}
+              <Twinkles x={IX} y={ROW_Y[0]} rx={70} ry={40} n={3} color="gold" />
+              <Label x={DX} y={ROW_Y[0]} size={32} anchor="start" color={C.ink}>
+                dalil dari Al-Qur'an & hadis sahih
+              </Label>
             </g>
+            {/* baris 2: chip renungan */}
+            <g opacity={r2i}>
+              <Glow x={IX} y={ROW_Y[1]} r={90} color="spr" opacity={0.5} />
+              <Chip x={IX} y={ROW_Y[1]} s={0.8} t={t} color={C.spr} />
+              <Label x={DX} y={ROW_Y[1]} size={32} anchor="start" color={C.ink} opacity={r2d}>
+                pemikiran, bukan kepastian
+              </Label>
+            </g>
+            {/* baris 3: simbol bergantian (cahaya, menara, gerbang) */}
+            <g opacity={r3i}>
+              <Glow x={IX} y={ROW_Y[2]} r={90} color="cyan" opacity={0.45} />
+              <g opacity={symW(0)}>
+                <circle cx={IX} cy={ROW_Y[2]} r={34} fill="url(#soft-cyan)" />
+                <circle cx={IX} cy={ROW_Y[2]} r={12} fill="#e6fbff" />
+              </g>
+              <g opacity={symW(1)}>
+                <path d={`M${IX - 14},${ROW_Y[2] + 40} L${IX - 10},${ROW_Y[2] - 24} L${IX},${ROW_Y[2] - 44} L${IX + 10},${ROW_Y[2] - 24} L${IX + 14},${ROW_Y[2] + 40} Z`} fill="#dff4ff" opacity={0.85} />
+              </g>
+              <g opacity={symW(2)}>
+                <path d={`M${IX - 34},${ROW_Y[2] + 40} V${ROW_Y[2] - 6} A34,34 0 0 1 ${IX + 34},${ROW_Y[2] - 6} V${ROW_Y[2] + 40}`} fill="none" stroke={C.gold} strokeWidth={5} />
+                <path d={`M${IX - 20},${ROW_Y[2] + 40} V${ROW_Y[2]} A20,20 0 0 1 ${IX + 20},${ROW_Y[2]} V${ROW_Y[2] + 40}`} fill="none" stroke={C.gold} strokeWidth={2.5} opacity={0.6} />
+              </g>
+              <g opacity={symW(3)}>
+                <line x1={IX - 44} y1={ROW_Y[2]} x2={IX + 44} y2={ROW_Y[2]} stroke={C.gold} strokeWidth={3} />
+                {[-1, 0, 1].map((k) => (
+                  <circle key={k} cx={IX + k * 32} cy={ROW_Y[2]} r={6} fill={C.gold} />
+                ))}
+              </g>
+              <Label x={DX} y={ROW_Y[2]} size={32} anchor="start" color={C.ink} opacity={r3d}>
+                cahaya · menara · gerbang · garis waktu
+              </Label>
+            </g>
+            <Ripple x={PILL_X} y={ROW_Y[0]} p={ramp(t, wordOf(1, 'tanda'), wordOf(1, 'tanda') + 1.2, (x) => x)} r={220} color="gold" rings={2} width={2} />
+            <Ripple x={PILL_X} y={ROW_Y[1]} p={ramp(t, wordOf(2, 'renungan'), wordOf(2, 'renungan') + 1.2, (x) => x)} r={220} color="spr" rings={2} width={2} />
+            <Ripple x={PILL_X} y={ROW_Y[2]} p={ramp(t, wordOf(3, 'simbol'), wordOf(3, 'simbol') + 1.2, (x) => x)} r={220} color="cyan" rings={2} width={2} />
           </g>
-        ))}
+        ) : null}
+
+        {/* ---------------- empat kartu ---------------- */}
+        {CARDS.map((c, i) => {
+          const p = cardP[i];
+          if (p <= 0.001) return null;
+          const x = CXS[i];
+          const bob = 4 * Math.sin(t * 1.1 + i * 1.3);
+          const lt = t - wordOf(4, c.key, c.nth);
+          return (
+            <g key={c.n} opacity={Math.min(1, p) * dim} transform={`translate(0 ${(1 - Math.min(1, p)) * 40 + bob})`}>
+              <Glow x={x} y={IY} r={200} color={c.hue} opacity={0.3} />
+              <rect x={x - CW / 2} y={CT} width={CW} height={CHt} rx={22} fill="rgba(12,18,40,0.88)" stroke={c.color} strokeOpacity={0.6} strokeWidth={2} />
+              <rect x={x - CW / 2 + 20} y={CT - 1} width={CW - 40} height={3} rx={1.5} fill={c.color} opacity={0.5 + 0.5 * Math.sin(t * 1.2 + i)} />
+              <circle cx={x - CW / 2 + 40} cy={CT + 40} r={22} fill="none" stroke={c.color} strokeWidth={2.5} />
+              <text x={x - CW / 2 + 40} y={CT + 41} textAnchor="middle" dominantBaseline="central" fontFamily={FONT.mono} fontWeight={600} fontSize={24} fill={c.color}>
+                {c.n}
+              </text>
+
+              {/* ikon bergerak */}
+              {i === 0 ? (
+                <g>
+                  <circle cx={x} cy={IY + 20} r={66} fill="#123a6a" stroke={C.cyan} strokeOpacity={0.6} strokeWidth={2} />
+                  <g clipPath={`url(#rm-earth${i})`}>
+                    {[0, 1, 2, 3].map((k) => {
+                      const ex = x - 120 + fr(t * 0.06 + k * 0.27) * 240;
+                      return <ellipse key={k} cx={ex} cy={IY + 20 + (k % 2 ? 22 : -18)} rx={28 + k * 5} ry={14 + (k % 2) * 6} fill={C.work} opacity={0.75} />;
+                    })}
+                  </g>
+                  <circle cx={x - 22} cy={IY} r={40} fill="#fff" opacity={0.06} />
+                  {/* bibit tumbuh di atas bumi */}
+                  {(() => {
+                    const g = ramp(lt, 0.2, 1.6, EASE_IN_OUT);
+                    const sw = 6 * Math.sin(t * 1.6);
+                    const top = IY - 46 - 54 * g;
+                    return (
+                      <g opacity={g}>
+                        <path d={`M${x},${IY - 44} Q${x + sw * 0.5},${(IY - 44 + top) / 2} ${x + sw},${top}`} fill="none" stroke={C.work} strokeWidth={4} strokeLinecap="round" />
+                        <path d={`M${x + sw * 0.6},${top + 22} q-26,-14 -30,-2 q14,10 30,2 Z`} fill={C.work} />
+                        <path d={`M${x + sw},${top + 6} q26,-16 30,-4 q-14,12 -30,4 Z`} fill={C.work} />
+                      </g>
+                    );
+                  })()}
+                  <Motes x={x} y={IY} rx={110} ry={80} n={10} color="work" opacity={0.5} />
+                </g>
+              ) : null}
+              {i === 1 ? (
+                <g>
+                  {(() => {
+                    const g = ramp(lt, 0.1, 1.6, EASE_IN_OUT);
+                    const hh = mix(40, 170, g) + 6 * Math.sin(t * 0.9);
+                    const base = IY + 80;
+                    return (
+                      <g>
+                        <rect x={x - 70} y={base - 50} width={30} height={50} fill="#1f2a50" />
+                        <rect x={x + 42} y={base - 66} width={34} height={66} fill="#1f2a50" />
+                        <rect x={x - 22} y={base - hh} width={44} height={hh} rx={3} fill="#2b3c70" stroke={C.kin} strokeWidth={2} />
+                        <path d={`M${x - 10},${base - hh} L${x},${base - hh - 34 * g} L${x + 10},${base - hh} Z`} fill={C.kin} opacity={0.9} />
+                        <line x1={x} y1={base - hh + 10} x2={x} y2={base - 8} stroke={C.gold} strokeWidth={6} strokeDasharray="6 10" strokeDashoffset={-t * 6} opacity={0.6} />
+                        <circle cx={x} cy={base - hh - 36 * g} r={4} fill={C.heat} opacity={0.3 + 0.7 * Math.max(0, Math.sin(t * 3.2))} />
+                        <line x1={x - 100} y1={base} x2={x + 100} y2={base} stroke={C.line} strokeWidth={2} />
+                      </g>
+                    );
+                  })()}
+                  <Motes x={x} y={IY} rx={110} ry={90} n={10} color="kin" opacity={0.5} />
+                </g>
+              ) : null}
+              {i === 2 ? (
+                <g>
+                  {(() => {
+                    const hy = IY + 60;
+                    const rise = 0.5 - 0.5 * Math.cos(Math.max(0, lt - 0.2) * 0.9);
+                    const sx = x - 70;
+                    const sy = hy + 30 - 90 * rise;
+                    return (
+                      <g>
+                        <clipPath id="rm-sun">
+                          <rect x={x - CW / 2 + 10} y={CT + 60} width={CW - 20} height={hy - CT - 60} />
+                        </clipPath>
+                        <g clipPath="url(#rm-sun)">
+                          <Glow x={sx} y={sy} r={110} color="heat" opacity={0.7} still />
+                          {Array.from({length: 10}, (_, k) => {
+                            const a = (k / 10) * Math.PI * 2 + t * 0.4;
+                            return <line key={k} x1={sx + 40 * Math.cos(a)} y1={sy + 40 * Math.sin(a)} x2={sx + 56 * Math.cos(a)} y2={sy + 56 * Math.sin(a)} stroke={C.heat} strokeWidth={3} strokeLinecap="round" opacity={0.7} />;
+                          })}
+                          <circle cx={sx} cy={sy} r={30} fill="#ff7a5a" />
+                        </g>
+                        <line x1={x - 140} y1={hy} x2={x + 140} y2={hy} stroke={C.heat} strokeOpacity={0.6} strokeWidth={2.5} />
+                        <path d={`M${x + 40},${hy - 10} v-60 m-12,14 l12,-14 l12,14`} fill="none" stroke={C.heat} strokeWidth={3} opacity={0.6 + 0.4 * Math.sin(t * 2)} />
+                        <text x={x - 70} y={hy + 30} textAnchor="middle" fontFamily={FONT.mono} fontSize={18} fill={C.heat}>
+                          barat
+                        </text>
+                      </g>
+                    );
+                  })()}
+                </g>
+              ) : null}
+              {i === 3 ? (
+                <g>
+                  <Chip x={x - 58} y={IY + 10} s={0.9} t={t} color={C.spr} />
+                  <Hourglass x={x + 70} y={IY + 10} s={1} t={t} color={C.gold} />
+                  <Stream pts={[[x - 10, IY + 10], [x + 40, IY + 10]]} color="spr" n={3} speed={0.8} r={3} jitter={1} />
+                </g>
+              ) : null}
+
+              <Label x={x} y={CT + 345} size={38} weight={700} color={C.ink}>
+                {c.title}
+              </Label>
+              <Label x={x} y={CT + 398} size={18} color={C.muted} font="mono">
+                {c.sub}
+              </Label>
+              <Ripple x={x} y={IY} p={ramp(t, wordOf(4, c.key, c.nth), wordOf(4, c.key, c.nth) + 1.2, (v) => v)} r={200} color={c.hue} rings={2} width={2} />
+            </g>
+          );
+        })}
+        {/* panah penghubung antar-kartu */}
+        {[0, 1, 2].map((k) => {
+          const p = Math.min(cardP[k], cardP[k + 1]);
+          if (p <= 0.001) return null;
+          const x = (CXS[k] + CXS[k + 1]) / 2;
+          const ph = fr(t * 0.8 + k * 0.3);
+          return (
+            <g key={k} opacity={Math.min(1, p) * dim}>
+              <path d={`M${x - 8 + 6 * ph},${CT + 210} l10,10 l-10,10`} fill="none" stroke={C.gold} strokeWidth={3} strokeLinecap="round" opacity={cyc(ph) * 0.9 + 0.1} />
+            </g>
+          );
+        })}
+        <Twinkles x={960} y={815} rx={380} ry={30} n={5} color="gold" opacity={allah} />
+        <Motes x={960} y={500} rx={820} ry={300} n={24} color="gold" opacity={0.35} />
       </Stage>
+
+      {/* pil legenda (HTML) */}
+      <AbsoluteFill style={{opacity: lo}}>
+        <Pill x={PILL_X} y={ROW_Y[0]} p={r1p} color={C.gold}>
+          QS / HR = sumber
+        </Pill>
+        <Pill x={PILL_X} y={ROW_Y[1]} p={r2p} color={C.spr}>
+          Renungan · bukan tafsir
+        </Pill>
+        <Pill x={PILL_X} y={ROW_Y[2]} p={r3p} color={C.cyan}>
+          tanpa wajah — simbol
+        </Pill>
+      </AbsoluteFill>
+      {/* catatan penutup */}
+      {ulama > 0.001 ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: 960,
+            top: 818,
+            transform: `translate(-50%, -50%) scale(${0.96 + 0.04 * ulama})`,
+            opacity: Math.min(1, ulama * 1.3),
+            padding: '14px 32px',
+            borderRadius: 16,
+            background: 'linear-gradient(160deg, rgba(22,34,72,0.94), rgba(10,16,36,0.94))',
+            border: `1.5px solid ${C.gold}55`,
+            borderLeft: `7px solid ${C.gold}`,
+            boxShadow: `0 18px 50px rgba(0,0,0,0.45), 0 0 34px ${C.gold}22`,
+            fontFamily: FONT.head,
+            fontSize: 32,
+            fontWeight: 500,
+            color: C.ink,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Rujukan utama: <span style={{color: C.gold}}>para ulama</span>
+          <span style={{opacity: allah}}>
+            {'  ·  '}
+            <span style={{color: C.gold, fontStyle: 'italic'}}>Allahu a'lam</span> — Allah paling mengetahui
+          </span>
+        </div>
+      ) : null}
     </AbsoluteFill>
   );
 };
